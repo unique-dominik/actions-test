@@ -8,7 +8,9 @@ jobs:
     uses: ./.github/workflows/template-gha-short-sha.yml
 
   dockerize:
+    runs-on: ubuntu-latest
     name: Build the container and push it
     needs: 
       - sha
-    run: echo "${{ needs.sha.outputs.sha }}"
+    steps: 
+      - run: echo "${{ needs.sha.outputs.sha }}"
