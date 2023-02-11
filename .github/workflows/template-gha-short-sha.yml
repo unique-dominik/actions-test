@@ -1,0 +1,28 @@
+#
+# DO NOT USE THIS FLOW IF YOU NEED CUSTOMIZATION, PUT THAT IN YOUR OWN FILE!
+#
+name: "[template] Get short commit SHA prefixed"
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      prefix:
+        description: SHA prefix if wanted
+        default: sha-
+        type: string
+    outputs:
+      sha:
+        description: "Full tag from SHA"
+        value: ${{ jobs.sha.outputs.sha }}
+
+jobs:
+  sha:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      sha: ${{ steps.short_sha.outputs.sha }}
+    steps:
+      - 
+        id: short_sha
+        run: echo "sha=${{ inputs.prefix }}$(git rev-parse --short=7 ${{ github.sha }})" >> $GITHUB_OUTPUT
