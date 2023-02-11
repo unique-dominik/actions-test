@@ -11,10 +11,6 @@ on:
         description: SHA prefix if wanted
         default: sha-
         type: string
-      revision:
-        description: Long revision SHA
-        required: true
-        type: string
     outputs:
       sha:
         description: "Full tag from SHA"
@@ -27,6 +23,6 @@ jobs:
     outputs:
       sha: ${{ steps.short_sha.outputs.sha }}
     steps:
-      - 
-        id: short_sha
-        run: echo "sha=${{ inputs.prefix }}$(git rev-parse --short=7 ${{ inputs.revision }})" >> $GITHUB_OUTPUT
+      - uses: actions/checkout@v3
+      - id: short_sha
+        run: echo "sha=${{ inputs.prefix }}$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
