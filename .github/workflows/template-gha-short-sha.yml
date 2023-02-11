@@ -25,4 +25,4 @@ jobs:
     steps:
       - 
         id: short_sha
-        run: echo "sha=$(git rev-parse --short=7 ${{ github.sha }})" >> $GITHUB_OUTPUT
+        run: echo "sha=$(git rev-parse --short=7 HEAD" >> $GITHUB_OUTPUT
