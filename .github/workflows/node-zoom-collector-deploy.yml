@@ -1,0 +1,14 @@
+name: "[node][zoom-collector] Deploy"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sha:
+    uses: ./.github/workflows/template-gha-short-sha.yml
+
+  dockerize:
+    name: Build the container and push it
+    needs: 
+      - sha
+    run: echo "${{ needs.sha.outputs.sha }}"
