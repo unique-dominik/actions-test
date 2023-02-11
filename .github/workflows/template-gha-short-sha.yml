@@ -11,6 +11,10 @@ on:
         description: SHA prefix if wanted
         default: sha-
         type: string
+      revision:
+        description: Long revision SHA
+        required: true
+        type: string
     outputs:
       sha:
         description: "Full tag from SHA"
@@ -19,10 +23,10 @@ on:
 jobs:
   sha:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 1
     outputs:
       sha: ${{ steps.short_sha.outputs.sha }}
     steps:
       - 
         id: short_sha
-        run: echo "sha=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
+        run: echo "sha=${{ inputs.prefix }}$(git rev-parse --short=7 ${{ inputs.revision }})" >> $GITHUB_OUTPUT
