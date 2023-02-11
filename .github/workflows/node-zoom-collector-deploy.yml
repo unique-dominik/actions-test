@@ -6,6 +6,8 @@ on:
 jobs:
   sha:
     uses: ./.github/workflows/template-gha-short-sha.yml
+    with:
+      revision: ${{ github.sha }}
 
   dockerize:
     runs-on: ubuntu-latest
