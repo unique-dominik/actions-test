@@ -25,4 +25,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - id: short_sha
-        run: echo "sha=${{ inputs.prefix }}$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
+        run: echo "sha=${{ inputs.prefix }}$(git rev-parse --short=7 HEAD)"
+      - id: short_sha_2
+        run: echo "sha=${{ inputs.prefix }}$(git rev-parse --short=7 ${{ github.sha }})"
