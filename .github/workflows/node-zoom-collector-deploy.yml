@@ -6,11 +6,15 @@ on:
 jobs:
   sha:
     uses: ./.github/workflows/template-gha-short-sha.yml
+    
+  ref:
+    uses: ./.github/workflows/blank.yml
 
   dockerize:
     runs-on: ubuntu-latest
     name: Build the container and push it
     needs: 
       - sha
+      - ref
     steps: 
       - run: echo "${{ needs.sha.outputs.sha }}"
