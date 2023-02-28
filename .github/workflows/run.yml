@@ -1,0 +1,15 @@
+name: 'test'
+on: # rebuild any PRs and main branch changes
+  pull_request:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test: # make sure the action works on a clean machine without building
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/app-of-apps/
+        with:
+          input-directory: src
+          output-directory: render

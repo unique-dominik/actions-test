@@ -1,0 +1,15 @@
+name: 'Your name here'
+description: 'Provide a description here'
+author: 'Your name or organization here'
+inputs:
+  input-directory:
+    required: true
+    description: Directory to glob apps from
+    default: '.'
+  output-directory:
+    required: true
+    description: Directory to put the sorted apps to
+    default: './app_of_apps'
+runs:
+  using: 'node16'
+  main: 'dist/index.js'

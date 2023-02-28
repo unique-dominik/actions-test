@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: child-app
+  namespace: argo
+  labels:
+    name: child-app
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/unique-dominik/anyrepo
+    targetRevision: HEAD
+    path: child-app/qa
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: custom-integrations
+  revisionHistoryLimit: 10
