@@ -3,13 +3,21 @@ description: 'Provide a description here'
 author: 'Your name or organization here'
 inputs:
   input-directory:
-    required: true
+    required: false
     description: Directory to glob apps from
     default: '.'
   output-directory:
     required: true
     description: Directory to put the sorted apps to
-    default: './app_of_apps'
+  argo-file-glob:
+    required: false
+    description: Glob pattern to find argo files
+    default: '**/*argo.{yml,yaml}'
+  supported-versions:
+    required: true
+    description: Respected apiVersions of the 
+    default: |
+      argoproj.io/v1alpha1
 runs:
   using: 'node16'
   main: 'dist/index.js'

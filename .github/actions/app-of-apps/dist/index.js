@@ -3721,13 +3721,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.appOfApps = void 0;
 const core = __importStar(__nccwpck_require__(2186));
 const promises_1 = __nccwpck_require__(3292);
-const glob_1 = __nccwpck_require__(9354);
+const glob_1 = __nccwpck_require__(5029);
 const path_1 = __nccwpck_require__(1017);
 const yaml_1 = __importDefault(__nccwpck_require__(4083));
-function appOfApps(inDir, outDir) {
+function appOfApps({ inDir, outDir, glob, supportedVersions }) {
     var _a, e_1, _b, _c;
     return __awaiter(this, void 0, void 0, function* () {
-        const ymlsGlob = new glob_1.Glob(`**/*argo.{yml,yaml}`, { cwd: inDir, absolute: true }); // TODO should be input param
+        const ymlsGlob = new glob_1.Glob(glob, { cwd: inDir, absolute: true }); // TODO should be input param
         const applicationSpecs = [];
         core.startGroup('Globbing files and evaluating candidates…');
         try {
@@ -3739,7 +3739,7 @@ function appOfApps(inDir, outDir) {
                     try {
                         const file = yield (0, promises_1.readFile)(candidate, 'utf8');
                         const application = yaml_1.default.parse(file);
-                        if (isArgoSpec(application)) {
+                        if (isArgoSpec(supportedVersions, application)) {
                             core.debug(`${candidate} seems to be a valid argo application spec!`);
                             applicationSpecs.push({ path: candidate, crd: application });
                         }
@@ -3777,16 +3777,16 @@ function appOfApps(inDir, outDir) {
 }
 exports.appOfApps = appOfApps;
 function specName(application) {
-    var _a, _b;
-    return `${(_a = application.metadata) === null || _a === void 0 ? void 0 : _a.name}.${(_b = application.metadata) === null || _b === void 0 ? void 0 : _b.namespace}.${application.apiVersion.replace('/', '_')}.yml`;
+    var _a, _b, _c;
+    return `${(_a = application.metadata) === null || _a === void 0 ? void 0 : _a.name}.${(_c = (_b = application.spec) === null || _b === void 0 ? void 0 : _b.destination) === null || _c === void 0 ? void 0 : _c.namespace}.yml`;
 }
-function isArgoSpec(application) {
-    var _a, _b, _c, _d;
-    return ((_a = application.metadata) === null || _a === void 0 ? void 0 : _a.name)
-        && ((_b = application.metadata) === null || _b === void 0 ? void 0 : _b.namespace)
-        && ((_d = (_c = application.metadata) === null || _c === void 0 ? void 0 : _c.labels) === null || _d === void 0 ? void 0 : _d.name)
-        && application.kind === 'Application'
-        && ['argoproj.io/v1alpha1'].includes(application.apiVersion);
+function isArgoSpec(supportedVersions, application) {
+    var _a, _b, _c, _d, _e;
+    return (((_a = application.metadata) === null || _a === void 0 ? void 0 : _a.name) &&
+        ((_c = (_b = application.spec) === null || _b === void 0 ? void 0 : _b.destination) === null || _c === void 0 ? void 0 : _c.namespace) &&
+        ((_e = (_d = application.metadata) === null || _d === void 0 ? void 0 : _d.labels) === null || _e === void 0 ? void 0 : _e.name) &&
+        application.kind === 'Application' &&
+        supportedVersions.includes(application.apiVersion));
 }
 
 
@@ -3837,8 +3837,13 @@ function run() {
         try {
             const inDir = core.getInput('input-directory');
             const outDir = core.getInput('output-directory');
-            core.debug(`Using directory ${inDir} saving to ${outDir} ...`);
-            yield (0, app_of_apps_1.appOfApps)(inDir, outDir);
+            const argoFileGlob = core.getInput('argo-file-glob');
+            const supportedVersions = core.getMultilineInput('supported-versions');
+            core.debug(`Using directory <${inDir}> saving to <${outDir}>, globbing Argo files as <${argoFileGlob}> and only respecting the following versions:`);
+            supportedVersions.map(v => {
+                core.debug(`\t - ${v}`);
+            });
+            yield (0, app_of_apps_1.appOfApps)({ inDir, outDir, glob: argoFileGlob, supportedVersions });
             // core.setOutput('time', new Date().toTimeString())
         }
         catch (error) {
@@ -3997,11 +4002,15 @@ const defaultPlatform = typeof process === 'object' &&
 class Glob {
     absolute;
     cwd;
+    root;
     dot;
+    dotRelative;
     follow;
     ignore;
+    magicalBraces;
     mark;
     matchBase;
+    maxDepth;
     nobrace;
     nocase;
     nodir;
@@ -4011,6 +4020,7 @@ class Glob {
     platform;
     realpath;
     scurry;
+    stat;
     signal;
     windowsPathsNoEscape;
     withFileTypes;
@@ -4039,6 +4049,7 @@ class Glob {
         this.signal = opts.signal;
         this.follow = !!opts.follow;
         this.dot = !!opts.dot;
+        this.dotRelative = !!opts.dotRelative;
         this.nodir = !!opts.nodir;
         this.mark = !!opts.mark;
         if (!opts.cwd) {
@@ -4048,14 +4059,20 @@ class Glob {
             opts.cwd = (0, url_1.fileURLToPath)(opts.cwd);
         }
         this.cwd = opts.cwd || '';
+        this.root = opts.root;
+        this.magicalBraces = !!opts.magicalBraces;
         this.nobrace = !!opts.nobrace;
         this.noext = !!opts.noext;
         this.realpath = !!opts.realpath;
-        this.absolute = !!opts.absolute;
+        this.absolute = opts.absolute;
         this.noglobstar = !!opts.noglobstar;
         this.matchBase = !!opts.matchBase;
-        if (this.withFileTypes && this.absolute) {
-            throw new Error('cannot set absolute:true and withFileTypes:true');
+        this.maxDepth =
+            typeof opts.maxDepth === 'number' ? opts.maxDepth : Infinity;
+        this.stat = !!opts.stat;
+        this.ignore = opts.ignore;
+        if (this.withFileTypes && this.absolute !== undefined) {
+            throw new Error('cannot set absolute and withFileTypes:true');
         }
         if (typeof pattern === 'string') {
             pattern = [pattern];
@@ -4090,7 +4107,10 @@ class Glob {
                     : opts.platform
                         ? path_scurry_1.PathScurryPosix
                         : path_scurry_1.PathScurry;
-            this.scurry = new Scurry(this.cwd, { nocase: opts.nocase });
+            this.scurry = new Scurry(this.cwd, {
+                nocase: opts.nocase,
+                fs: opts.fs,
+            });
         }
         this.nocase = this.scurry.nocase;
         const mmo = {
@@ -4126,6 +4146,9 @@ class Glob {
         return [
             ...(await new walker_js_1.GlobWalker(this.patterns, this.scurry.cwd, {
                 ...this.opts,
+                maxDepth: this.maxDepth !== Infinity
+                    ? this.maxDepth + this.scurry.cwd.depth()
+                    : Infinity,
                 platform: this.platform,
                 nocase: this.nocase,
             }).walk()),
@@ -4135,6 +4158,9 @@ class Glob {
         return [
             ...new walker_js_1.GlobWalker(this.patterns, this.scurry.cwd, {
                 ...this.opts,
+                maxDepth: this.maxDepth !== Infinity
+                    ? this.maxDepth + this.scurry.cwd.depth()
+                    : Infinity,
                 platform: this.platform,
                 nocase: this.nocase,
             }).walkSync(),
@@ -4143,6 +4169,9 @@ class Glob {
     stream() {
         return new walker_js_1.GlobStream(this.patterns, this.scurry.cwd, {
             ...this.opts,
+            maxDepth: this.maxDepth !== Infinity
+                ? this.maxDepth + this.scurry.cwd.depth()
+                : Infinity,
             platform: this.platform,
             nocase: this.nocase,
         }).stream();
@@ -4150,6 +4179,9 @@ class Glob {
     streamSync() {
         return new walker_js_1.GlobStream(this.patterns, this.scurry.cwd, {
             ...this.opts,
+            maxDepth: this.maxDepth !== Infinity
+                ? this.maxDepth + this.scurry.cwd.depth()
+                : Infinity,
             platform: this.platform,
             nocase: this.nocase,
         }).streamSync();
@@ -4187,19 +4219,27 @@ exports.Glob = Glob;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.hasMagic = void 0;
-const glob_js_1 = __nccwpck_require__(3707);
+const minimatch_1 = __nccwpck_require__(3355);
 /**
- * Return true if the patterns provided contain any magic
- * glob characters.
+ * Return true if the patterns provided contain any magic glob characters,
+ * given the options provided.
+ *
+ * Brace expansion is not considered "magic" unless the `magicalBraces` option
+ * is set, as brace expansion just turns one string into an array of strings.
+ * So a pattern like `'x{a,b}y'` would return `false`, because `'xay'` and
+ * `'xby'` both do not contain any magic glob characters, and it's treated the
+ * same as if you had called it on `['xay', 'xby']`. When `magicalBraces:true`
+ * is in the options, brace expansion _is_ treated as a pattern having magic.
  */
 const hasMagic = (pattern, options = {}) => {
     if (!Array.isArray(pattern)) {
         pattern = [pattern];
     }
-    const g = new glob_js_1.Glob(pattern, options);
-    return g.patterns.length === 0
-        ? false
-        : g.patterns.some(p => p.hasMagic());
+    for (const p of pattern) {
+        if (new minimatch_1.Minimatch(p, options).hasMagic())
+            return true;
+    }
+    return false;
 };
 exports.hasMagic = hasMagic;
 //# sourceMappingURL=has-magic.js.map
@@ -4245,6 +4285,8 @@ class Ignore {
             noglobstar,
             optimizationLevel: 2,
             platform,
+            nocomment: true,
+            nonegate: true,
         };
         // this is a little weird, but it gives us a clean set of optimized
         // minimatch matchers, without getting tripped up if one of them
@@ -4314,13 +4356,28 @@ exports.Ignore = Ignore;
 
 /***/ }),
 
+/***/ 5029:
+/***/ (function(module, __unused_webpack_exports, __nccwpck_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+const index_js_1 = __importDefault(__nccwpck_require__(9354));
+module.exports = Object.assign(index_js_1.default, { default: index_js_1.default, glob: index_js_1.default });
+//# sourceMappingURL=index-cjs.js.map
+
+/***/ }),
+
 /***/ 9354:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.hasMagic = exports.Glob = exports.globIterateSync = exports.globIterate = exports.glob = exports.globSync = exports.globStream = exports.globStreamSync = void 0;
+exports.hasMagic = exports.Glob = exports.unescape = exports.escape = exports.globIterateSync = exports.globIterate = exports.glob = exports.globSync = exports.globStream = exports.globStreamSync = void 0;
+const minimatch_1 = __nccwpck_require__(3355);
 const glob_js_1 = __nccwpck_require__(3707);
 const has_magic_js_1 = __nccwpck_require__(1945);
 function globStreamSync(pattern, options = {}) {
@@ -4348,6 +4405,9 @@ function globIterateSync(pattern, options = {}) {
 }
 exports.globIterateSync = globIterateSync;
 /* c8 ignore start */
+var minimatch_2 = __nccwpck_require__(3355);
+Object.defineProperty(exports, "escape", ({ enumerable: true, get: function () { return minimatch_2.escape; } }));
+Object.defineProperty(exports, "unescape", ({ enumerable: true, get: function () { return minimatch_2.unescape; } }));
 var glob_js_2 = __nccwpck_require__(3707);
 Object.defineProperty(exports, "Glob", ({ enumerable: true, get: function () { return glob_js_2.Glob; } }));
 var has_magic_js_2 = __nccwpck_require__(1945);
@@ -4362,6 +4422,8 @@ exports["default"] = Object.assign(glob, {
     globIterateSync,
     Glob: glob_js_1.Glob,
     hasMagic: has_magic_js_1.hasMagic,
+    escape: minimatch_1.escape,
+    unescape: minimatch_1.unescape,
 });
 //# sourceMappingURL=index.js.map
 
@@ -4570,17 +4632,6 @@ class Pattern {
             : '';
     }
     /**
-     * True if the pattern has any non-string components
-     */
-    hasMagic() {
-        for (let i = 0; i < this.length; i++) {
-            if (typeof this.#patternList[i] !== 'string') {
-                return true;
-            }
-        }
-        return false;
-    }
-    /**
      * Check to see if the current globstar pattern is allowed to follow
      * a symbolic link.
      */
@@ -4725,10 +4776,12 @@ class Processor {
         for (let [t, pattern] of processingSet) {
             this.hasWalkedCache.storeWalked(t, pattern);
             const root = pattern.root();
-            const absolute = pattern.isAbsolute();
+            const absolute = pattern.isAbsolute() && this.opts.absolute !== false;
             // start absolute patterns at root
             if (root) {
-                t = t.resolve(root);
+                t = t.resolve(root === '/' && this.opts.root !== undefined
+                    ? this.opts.root
+                    : root);
                 const rest = pattern.rest();
                 if (!rest) {
                     this.matches.add(t, true, false);
@@ -4939,9 +4992,7 @@ const makeIgnore = (ignore, opts) => typeof ignore === 'string'
     ? new ignore_js_1.Ignore([ignore], opts)
     : Array.isArray(ignore)
         ? new ignore_js_1.Ignore(ignore, opts)
-        : /* c8 ignore start */
-            ignore;
-/* c8 ignore stop */
+        : ignore;
 /**
  * basic walking utilities that all the glob walker types use
  */
@@ -4956,6 +5007,7 @@ class GlobUtil {
     #ignore;
     #sep;
     signal;
+    maxDepth;
     constructor(patterns, path, opts) {
         this.patterns = patterns;
         this.path = path;
@@ -4964,6 +5016,11 @@ class GlobUtil {
         if (opts.ignore) {
             this.#ignore = makeIgnore(opts.ignore, opts);
         }
+        // ignore, always set with maxDepth, but it's optional on the
+        // GlobOptions type
+        /* c8 ignore start */
+        this.maxDepth = opts.maxDepth || Infinity;
+        /* c8 ignore stop */
         if (opts.signal) {
             this.signal = opts.signal;
             this.signal.addEventListener('abort', () => {
@@ -4972,10 +5029,10 @@ class GlobUtil {
         }
     }
     #ignored(path) {
-        return this.seen.has(path) || !!this.#ignore?.ignored(path);
+        return this.seen.has(path) || !!this.#ignore?.ignored?.(path);
     }
     #childrenIgnored(path) {
-        return !!this.#ignore?.childrenIgnored(path);
+        return !!this.#ignore?.childrenIgnored?.(path);
     }
     // backpressure mechanism
     pause() {
@@ -5016,14 +5073,15 @@ class GlobUtil {
                 return undefined;
             e = rpc;
         }
-        const needStat = e.isUnknown();
+        const needStat = e.isUnknown() || this.opts.stat;
         return this.matchCheckTest(needStat ? await e.lstat() : e, ifDir);
     }
     matchCheckTest(e, ifDir) {
         return e &&
-            !this.#ignored(e) &&
+            (this.maxDepth === Infinity || e.depth() <= this.maxDepth) &&
             (!ifDir || e.canReaddir()) &&
-            (!this.opts.nodir || !e.isDirectory())
+            (!this.opts.nodir || !e.isDirectory()) &&
+            !this.#ignored(e)
             ? e
             : undefined;
     }
@@ -5037,24 +5095,28 @@ class GlobUtil {
                 return undefined;
             e = rpc;
         }
-        const needStat = e.isUnknown();
+        const needStat = e.isUnknown() || this.opts.stat;
         return this.matchCheckTest(needStat ? e.lstatSync() : e, ifDir);
     }
     matchFinish(e, absolute) {
         if (this.#ignored(e))
             return;
+        const abs = this.opts.absolute === undefined ? absolute : this.opts.absolute;
         this.seen.add(e);
         const mark = this.opts.mark && e.isDirectory() ? this.#sep : '';
         // ok, we have what we need!
         if (this.opts.withFileTypes) {
             this.matchEmit(e);
         }
-        else if (this.opts.absolute || absolute) {
+        else if (abs) {
             this.matchEmit(e.fullpath() + mark);
         }
         else {
             const rel = e.relative();
-            this.matchEmit(!rel && mark ? './' : rel + mark);
+            const pre = this.opts.dotRelative && !rel.startsWith('..' + this.#sep)
+                ? '.' + this.#sep
+                : '';
+            this.matchEmit(!rel && mark ? '.' + mark : pre + rel + mark);
         }
     }
     async match(e, absolute, ifDir) {
@@ -5099,6 +5161,9 @@ class GlobUtil {
             this.match(m, absolute, ifDir).then(() => next());
         }
         for (const t of processor.subwalkTargets()) {
+            if (this.maxDepth !== Infinity && t.depth() >= this.maxDepth) {
+                continue;
+            }
             tasks++;
             const childrenCached = t.readdirCached();
             if (t.calledReaddir())
@@ -5159,6 +5224,9 @@ class GlobUtil {
             this.matchSync(m, absolute, ifDir);
         }
         for (const t of processor.subwalkTargets()) {
+            if (this.maxDepth !== Infinity && t.depth() >= this.maxDepth) {
+                continue;
+            }
             tasks++;
             const children = t.readdirSync();
             this.walkCB3Sync(t, children, processor, next);
@@ -5305,12 +5373,12 @@ const posixClasses = {
     '[:xdigit:]': ['A-Fa-f0-9', false],
 };
 // only need to escape a few things inside of brace expressions
-const regExpEscape = (s) => s.replace(/[[\]\\-]/g, '\\$&');
-const rangesToString = (ranges) => {
-    return (ranges
-        // .map(r => r.replace(/[[\]]/g, '\\$&').replace(/^-/, '\\-'))
-        .join(''));
-};
+// escapes: [ \ ] -
+const braceEscape = (s) => s.replace(/[[\]\\-]/g, '\\$&');
+// escape all regexp magic characters
+const regexpEscape = (s) => s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+// everything has already been escaped, we just have to join
+const rangesToString = (ranges) => ranges.join('');
 // takes a glob string at a posix brace expression, and returns
 // an equivalent regular expression source, and boolean indicating
 // whether the /u flag needs to be applied, and the number of chars
@@ -5359,7 +5427,7 @@ const parseClass = (glob, position) => {
                 if (glob.startsWith(cls, i)) {
                     // invalid, [a-[] is fine, but not [a-[:alpha]]
                     if (rangeStart) {
-                        return ['$.', false, glob.length - pos];
+                        return ['$.', false, glob.length - pos, true];
                     }
                     i += cls.length;
                     if (neg)
@@ -5377,10 +5445,10 @@ const parseClass = (glob, position) => {
             // throw this range away if it's not valid, but others
             // can still match.
             if (c > rangeStart) {
-                ranges.push(regExpEscape(rangeStart) + '-' + regExpEscape(c));
+                ranges.push(braceEscape(rangeStart) + '-' + braceEscape(c));
             }
             else if (c === rangeStart) {
-                ranges.push(regExpEscape(c));
+                ranges.push(braceEscape(c));
             }
             rangeStart = '';
             i++;
@@ -5389,7 +5457,7 @@ const parseClass = (glob, position) => {
         // now might be the start of a range.
         // can be either c-d or c-] or c<more...>] or c] at this point
         if (glob.startsWith('-]', i + 1)) {
-            ranges.push(regExpEscape(c + '-'));
+            ranges.push(braceEscape(c + '-'));
             i += 2;
             continue;
         }
@@ -5399,18 +5467,29 @@ const parseClass = (glob, position) => {
             continue;
         }
         // not the start of a range, just a single character
-        ranges.push(regExpEscape(c));
+        ranges.push(braceEscape(c));
         i++;
     }
     if (endPos < i) {
         // didn't see the end of the class, not a valid class,
         // but might still be valid as a literal match.
-        return ['', false, 0];
+        return ['', false, 0, false];
     }
     // if we got no ranges and no negates, then we have a range that
     // cannot possibly match anything, and that poisons the whole glob
     if (!ranges.length && !negs.length) {
-        return ['$.', false, glob.length - pos];
+        return ['$.', false, glob.length - pos, true];
+    }
+    // if we got one positive range, and it's a single character, then that's
+    // not actually a magic pattern, it's just that one literal character.
+    // we should not treat that as "magic", we should just return the literal
+    // character. [_] is a perfectly valid way to escape glob magic chars.
+    if (negs.length === 0 &&
+        ranges.length === 1 &&
+        /^\\?.$/.test(ranges[0]) &&
+        !negate) {
+        const r = ranges[0].length === 2 ? ranges[0].slice(-1) : ranges[0];
+        return [regexpEscape(r), false, endPos - pos, false];
     }
     const sranges = '[' + (negate ? '^' : '') + rangesToString(ranges) + ']';
     const snegs = '[' + (negate ? '' : '^') + rangesToString(negs) + ']';
@@ -5419,10 +5498,39 @@ const parseClass = (glob, position) => {
         : ranges.length
             ? sranges
             : snegs;
-    return [comb, uflag, endPos - pos];
+    return [comb, uflag, endPos - pos, true];
 };
 exports.parseClass = parseClass;
 //# sourceMappingURL=brace-expressions.js.map
+
+/***/ }),
+
+/***/ 1477:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.escape = void 0;
+/**
+ * Escape all magic characters in a glob pattern.
+ *
+ * If the {@link windowsPathsNoEscape | GlobOptions.windowsPathsNoEscape}
+ * option is used, then characters are escaped by wrapping in `[]`, because
+ * a magic character wrapped in a character class can only be satisfied by
+ * that exact character.  In this mode, `\` is _not_ escaped, because it is
+ * not interpreted as a magic character, but instead as a path separator.
+ */
+const escape = (s, { windowsPathsNoEscape = false, } = {}) => {
+    // don't need to escape +@! because we escape the parens
+    // that make those magic, and escaping ! as [!] isn't valid,
+    // because [!]] is a valid glob class meaning not ']'.
+    return windowsPathsNoEscape
+        ? s.replace(/[?*()[\]]/g, '[$&]')
+        : s.replace(/[?*()[\]\\]/g, '\\$&');
+};
+exports.escape = escape;
+//# sourceMappingURL=escape.js.map
 
 /***/ }),
 
@@ -5449,9 +5557,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.Minimatch = exports.match = exports.makeRe = exports.braceExpand = exports.defaults = exports.filter = exports.GLOBSTAR = exports.sep = exports.minimatch = void 0;
+exports.unescape = exports.escape = exports.Minimatch = exports.match = exports.makeRe = exports.braceExpand = exports.defaults = exports.filter = exports.GLOBSTAR = exports.sep = exports.minimatch = void 0;
 const brace_expansion_1 = __importDefault(__nccwpck_require__(1046));
 const brace_expressions_js_1 = __nccwpck_require__(314);
+const escape_js_1 = __nccwpck_require__(1477);
+const unescape_js_1 = __nccwpck_require__(9820);
 const minimatch = (p, pattern, options = {}) => {
     assertValidPattern(pattern);
     // shortcut: comments match nothing.
@@ -5576,6 +5686,8 @@ const defaults = (def) => {
                 return orig.defaults(ext(def, options)).Minimatch;
             }
         },
+        unescape: (s, options = {}) => orig.unescape(s, ext(def, options)),
+        escape: (s, options = {}) => orig.escape(s, ext(def, options)),
         filter: (pattern, options = {}) => orig.filter(pattern, ext(def, options)),
         defaults: (options) => orig.defaults(ext(def, options)),
         makeRe: (pattern, options = {}) => orig.makeRe(pattern, ext(def, options)),
@@ -5693,6 +5805,18 @@ class Minimatch {
         this.set = [];
         // make the set of regexps etc.
         this.make();
+    }
+    hasMagic() {
+        if (this.options.magicalBraces && this.set.length > 1) {
+            return true;
+        }
+        for (const pattern of this.set) {
+            for (const part of pattern) {
+                if (typeof part !== 'string')
+                    return true;
+            }
+        }
+        return false;
     }
     debug(..._) { }
     make() {
@@ -6439,12 +6563,12 @@ class Minimatch {
                 case '[':
                     // swallow any state-tracking char before the [
                     clearStateChar();
-                    const [src, needUflag, consumed] = (0, brace_expressions_js_1.parseClass)(pattern, i);
+                    const [src, needUflag, consumed, magic] = (0, brace_expressions_js_1.parseClass)(pattern, i);
                     if (consumed) {
                         re += src;
                         uflag = uflag || needUflag;
                         i += consumed - 1;
-                        hasMagic = true;
+                        hasMagic = hasMagic || magic;
                     }
                     else {
                         re += '\\[';
@@ -6542,7 +6666,7 @@ class Minimatch {
         // unescape anything in it, though, so that it'll be
         // an exact match against a file etc.
         if (!hasMagic) {
-            return globUnescape(pattern);
+            return globUnescape(re);
         }
         const flags = (options.nocase ? 'i' : '') + (uflag ? 'u' : '');
         try {
@@ -6722,8 +6846,47 @@ class Minimatch {
     }
 }
 exports.Minimatch = Minimatch;
+/* c8 ignore start */
+var escape_js_2 = __nccwpck_require__(1477);
+Object.defineProperty(exports, "escape", ({ enumerable: true, get: function () { return escape_js_2.escape; } }));
+var unescape_js_2 = __nccwpck_require__(9820);
+Object.defineProperty(exports, "unescape", ({ enumerable: true, get: function () { return unescape_js_2.unescape; } }));
+/* c8 ignore stop */
 exports.minimatch.Minimatch = Minimatch;
+exports.minimatch.escape = escape_js_1.escape;
+exports.minimatch.unescape = unescape_js_1.unescape;
 //# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ 9820:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.unescape = void 0;
+/**
+ * Un-escape a string that has been escaped with {@link escape}.
+ *
+ * If the {@link windowsPathsNoEscape} option is used, then square-brace
+ * escapes are removed, but not backslash escapes.  For example, it will turn
+ * the string `'[*]'` into `*`, but it will not turn `'\\*'` into `'*'`,
+ * becuase `\` is a path separator in `windowsPathsNoEscape` mode.
+ *
+ * When `windowsPathsNoEscape` is not set, then both brace escapes and
+ * backslash escapes are removed.
+ *
+ * Slashes (and backslashes in `windowsPathsNoEscape` mode) cannot be escaped
+ * or unescaped.
+ */
+const unescape = (s, { windowsPathsNoEscape = false, } = {}) => {
+    return windowsPathsNoEscape
+        ? s.replace(/\[([^\/\\])\]/g, '$1')
+        : s.replace(/((?!\\).|^)\[([^\/\\])\]/g, '$1$2').replace(/\\([^\/])/g, '$1');
+};
+exports.unescape = unescape;
+//# sourceMappingURL=unescape.js.map
 
 /***/ }),
 
@@ -6732,6 +6895,29 @@ exports.minimatch.Minimatch = Minimatch;
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -6740,12 +6926,37 @@ exports.PathScurry = exports.Path = exports.PathScurryDarwin = exports.PathScurr
 const lru_cache_1 = __importDefault(__nccwpck_require__(758));
 const path_1 = __nccwpck_require__(1017);
 const url_1 = __nccwpck_require__(7310);
+const actualFS = __importStar(__nccwpck_require__(7147));
 const fs_1 = __nccwpck_require__(7147);
 const realpathSync = fs_1.realpathSync.native;
 // TODO: test perf of fs/promises realpath vs realpathCB,
 // since the promises one uses realpath.native
 const promises_1 = __nccwpck_require__(3292);
 const minipass_1 = __importDefault(__nccwpck_require__(1077));
+const defaultFS = {
+    lstatSync: fs_1.lstatSync,
+    readdir: fs_1.readdir,
+    readdirSync: fs_1.readdirSync,
+    readlinkSync: fs_1.readlinkSync,
+    realpathSync,
+    promises: {
+        lstat: promises_1.lstat,
+        readdir: promises_1.readdir,
+        readlink: promises_1.readlink,
+        realpath: promises_1.realpath,
+    },
+};
+// if they just gave us require('fs') then use our default
+const fsFromOption = (fsOption) => !fsOption || fsOption === defaultFS || fsOption === actualFS
+    ? defaultFS
+    : {
+        ...defaultFS,
+        ...fsOption,
+        promises: {
+            ...defaultFS.promises,
+            ...(fsOption.promises || {}),
+        },
+    };
 // turn something like //?/c:/ into c:\
 const uncDriveRegexp = /^\\\\\?\\([a-z]:)\\?$/i;
 const uncToDrive = (rootPath) => rootPath.replace(/\//g, '\\').replace(uncDriveRegexp, '$1\\');
@@ -6894,7 +7105,83 @@ class PathBase {
      * @internal
      */
     nocase;
+    // potential default fs override
+    #fs;
+    // Stats fields
+    #dev;
+    get dev() {
+        return this.#dev;
+    }
+    #mode;
+    get mode() {
+        return this.#mode;
+    }
+    #nlink;
+    get nlink() {
+        return this.#nlink;
+    }
+    #uid;
+    get uid() {
+        return this.#uid;
+    }
+    #gid;
+    get gid() {
+        return this.#gid;
+    }
+    #rdev;
+    get rdev() {
+        return this.#rdev;
+    }
+    #blksize;
+    get blksize() {
+        return this.#blksize;
+    }
+    #ino;
+    get ino() {
+        return this.#ino;
+    }
+    #size;
+    get size() {
+        return this.#size;
+    }
+    #blocks;
+    get blocks() {
+        return this.#blocks;
+    }
+    #atimeMs;
+    get atimeMs() {
+        return this.#atimeMs;
+    }
+    #mtimeMs;
+    get mtimeMs() {
+        return this.#mtimeMs;
+    }
+    #ctimeMs;
+    get ctimeMs() {
+        return this.#ctimeMs;
+    }
+    #birthtimeMs;
+    get birthtimeMs() {
+        return this.#birthtimeMs;
+    }
+    #atime;
+    get atime() {
+        return this.#atime;
+    }
+    #mtime;
+    get mtime() {
+        return this.#mtime;
+    }
+    #ctime;
+    get ctime() {
+        return this.#ctime;
+    }
+    #birthtime;
+    get birthtime() {
+        return this.#birthtime;
+    }
     #matchName;
+    #depth;
     #fullpath;
     #relative;
     #type;
@@ -6918,6 +7205,24 @@ class PathBase {
         this.#fullpath = opts.fullpath;
         this.#relative = opts.relative;
         this.parent = opts.parent;
+        if (this.parent) {
+            this.#fs = this.parent.#fs;
+        }
+        else {
+            this.#fs = fsFromOption(opts.fs);
+        }
+    }
+    /**
+     * Returns the depth of the Path object from its root.
+     *
+     * For example, a path at `/foo/bar` would have a depth of 2.
+     */
+    depth() {
+        if (this.#depth !== undefined)
+            return this.#depth;
+        if (!this.parent)
+            return (this.#depth = 0);
+        return (this.#depth = this.parent.depth() + 1);
     }
     /**
      * @internal
@@ -7002,9 +7307,11 @@ class PathBase {
         const fullpath = this.#fullpath
             ? this.#fullpath + s + pathPart
             : undefined;
-        const pchild = this.newChild(pathPart, UNKNOWN, opts);
-        pchild.parent = this;
-        pchild.#fullpath = fullpath;
+        const pchild = this.newChild(pathPart, UNKNOWN, {
+            ...opts,
+            parent: this,
+            fullpath,
+        });
         if (!this.canReaddir()) {
             pchild.#type |= ENOENT;
         }
@@ -7216,7 +7523,7 @@ class PathBase {
         }
         /* c8 ignore stop */
         try {
-            const read = await (0, promises_1.readlink)(this.fullpath());
+            const read = await this.#fs.promises.readlink(this.fullpath());
             const linkTarget = this.parent.resolve(read);
             if (linkTarget) {
                 return (this.#linkTarget = linkTarget);
@@ -7245,7 +7552,7 @@ class PathBase {
         }
         /* c8 ignore stop */
         try {
-            const read = (0, fs_1.readlinkSync)(this.fullpath());
+            const read = this.#fs.readlinkSync(this.fullpath());
             const linkTarget = this.parent.resolve(read);
             if (linkTarget) {
                 return (this.#linkTarget = linkTarget);
@@ -7411,12 +7718,7 @@ class PathBase {
     async lstat() {
         if ((this.#type & ENOENT) === 0) {
             try {
-                // retain any other flags, but set the ifmt
-                const ifmt = entToType(await (0, promises_1.lstat)(this.fullpath()));
-                this.#type = (this.#type & IFMT_UNKNOWN) | ifmt | LSTAT_CALLED;
-                if (ifmt !== UNKNOWN && ifmt !== IFDIR && ifmt !== IFLNK) {
-                    this.#type |= ENOTDIR;
-                }
+                this.#applyStat(await this.#fs.promises.lstat(this.fullpath()));
                 return this;
             }
             catch (er) {
@@ -7430,17 +7732,39 @@ class PathBase {
     lstatSync() {
         if ((this.#type & ENOENT) === 0) {
             try {
-                // retain any other flags, but set the ifmt
-                const ifmt = entToType((0, fs_1.lstatSync)(this.fullpath()));
-                this.#type = (this.#type & IFMT_UNKNOWN) | ifmt | LSTAT_CALLED;
-                if (ifmt !== UNKNOWN && ifmt !== IFDIR && ifmt !== IFLNK) {
-                    this.#type |= ENOTDIR;
-                }
+                this.#applyStat(this.#fs.lstatSync(this.fullpath()));
                 return this;
             }
             catch (er) {
                 this.#lstatFail(er.code);
             }
+        }
+    }
+    #applyStat(st) {
+        const { atime, atimeMs, birthtime, birthtimeMs, blksize, blocks, ctime, ctimeMs, dev, gid, ino, mode, mtime, mtimeMs, nlink, rdev, size, uid, } = st;
+        this.#atime = atime;
+        this.#atimeMs = atimeMs;
+        this.#birthtime = birthtime;
+        this.#birthtimeMs = birthtimeMs;
+        this.#blksize = blksize;
+        this.#blocks = blocks;
+        this.#ctime = ctime;
+        this.#ctimeMs = ctimeMs;
+        this.#dev = dev;
+        this.#gid = gid;
+        this.#ino = ino;
+        this.#mode = mode;
+        this.#mtime = mtime;
+        this.#mtimeMs = mtimeMs;
+        this.#nlink = nlink;
+        this.#rdev = rdev;
+        this.#size = size;
+        this.#uid = uid;
+        const ifmt = entToType(st);
+        // retain any other flags, but set the ifmt
+        this.#type = (this.#type & IFMT_UNKNOWN) | ifmt | LSTAT_CALLED;
+        if (ifmt !== UNKNOWN && ifmt !== IFDIR && ifmt !== IFLNK) {
+            this.#type |= ENOTDIR;
         }
     }
     #onReaddirCB = [];
@@ -7493,12 +7817,14 @@ class PathBase {
         // else read the directory, fill up children
         // de-provisionalize any provisional children.
         const fullpath = this.fullpath();
-        (0, fs_1.readdir)(fullpath, { withFileTypes: true }, (er, entries) => {
+        this.#fs.readdir(fullpath, { withFileTypes: true }, (er, entries) => {
             if (er) {
                 this.#readdirFail(er.code);
                 children.provisional = 0;
             }
             else {
+                // if we didn't get an error, we always get entries.
+                //@ts-ignore
                 for (const e of entries) {
                     this.#readdirAddChild(e, children);
                 }
@@ -7538,7 +7864,9 @@ class PathBase {
             /* c8 ignore stop */
             this.#asyncReaddirInFlight = new Promise(res => (resolve = res));
             try {
-                for (const e of await (0, promises_1.readdir)(fullpath, { withFileTypes: true })) {
+                for (const e of await this.#fs.promises.readdir(fullpath, {
+                    withFileTypes: true,
+                })) {
                     this.#readdirAddChild(e, children);
                 }
                 this.#readdirSuccess(children);
@@ -7567,7 +7895,9 @@ class PathBase {
         // de-provisionalize any provisional children.
         const fullpath = this.fullpath();
         try {
-            for (const e of (0, fs_1.readdirSync)(fullpath, { withFileTypes: true })) {
+            for (const e of this.#fs.readdirSync(fullpath, {
+                withFileTypes: true,
+            })) {
                 this.#readdirAddChild(e, children);
             }
             this.#readdirSuccess(children);
@@ -7611,7 +7941,7 @@ class PathBase {
         if ((ENOREALPATH | ENOREADLINK | ENOENT) & this.#type)
             return undefined;
         try {
-            const rp = await (0, promises_1.realpath)(this.fullpath());
+            const rp = await this.#fs.promises.realpath(this.fullpath());
             return (this.#realpath = this.resolve(rp));
         }
         catch (_) {
@@ -7627,7 +7957,7 @@ class PathBase {
         if ((ENOREALPATH | ENOREADLINK | ENOENT) & this.#type)
             return undefined;
         try {
-            const rp = realpathSync(this.fullpath());
+            const rp = this.#fs.realpathSync(this.fullpath());
             return (this.#realpath = this.resolve(rp));
         }
         catch (_) {
@@ -7780,6 +8110,7 @@ class PathScurryBase {
      * Defaults true on Darwin and Windows systems, false elsewhere.
      */
     nocase;
+    #fs;
     /**
      * This class should not be instantiated directly.
      *
@@ -7787,7 +8118,8 @@ class PathScurryBase {
      *
      * @internal
      */
-    constructor(cwd = process.cwd(), pathImpl, sep, { nocase, childrenCacheSize = 16 * 1024 } = {}) {
+    constructor(cwd = process.cwd(), pathImpl, sep, { nocase, childrenCacheSize = 16 * 1024, fs = defaultFS, } = {}) {
+        this.#fs = fsFromOption(fs);
         if (cwd instanceof URL || cwd.startsWith('file://')) {
             cwd = (0, url_1.fileURLToPath)(cwd);
         }
@@ -7809,7 +8141,7 @@ class PathScurryBase {
         }
         /* c8 ignore stop */
         this.nocase = nocase;
-        this.root = this.newRoot();
+        this.root = this.newRoot(this.#fs);
         this.roots[this.rootPath] = this.root;
         let prev = this.root;
         let len = split.length - 1;
@@ -7824,6 +8156,15 @@ class PathScurryBase {
             sawFirst = true;
         }
         this.cwd = prev;
+    }
+    /**
+     * Get the depth of a provided path, string, or the cwd
+     */
+    depth(path = this.cwd) {
+        if (typeof path === 'string') {
+            path = this.cwd.resolve(path);
+        }
+        return path.depth();
     }
     /**
      * Return the cache of child entries.  Exposed so subclasses can create
@@ -8337,8 +8678,8 @@ class PathScurryWin32 extends PathScurryBase {
     /**
      * @internal
      */
-    newRoot() {
-        return new PathWin32(this.rootPath, IFDIR, undefined, this.roots, this.nocase, this.childrenCache(), {});
+    newRoot(fs) {
+        return new PathWin32(this.rootPath, IFDIR, undefined, this.roots, this.nocase, this.childrenCache(), { fs });
     }
     /**
      * Return true if the provided path string is an absolute path
@@ -8374,8 +8715,8 @@ class PathScurryPosix extends PathScurryBase {
     /**
      * @internal
      */
-    newRoot() {
-        return new PathPosix(this.rootPath, IFDIR, undefined, this.roots, this.nocase, this.childrenCache(), {});
+    newRoot(fs) {
+        return new PathPosix(this.rootPath, IFDIR, undefined, this.roots, this.nocase, this.childrenCache(), { fs });
     }
     /**
      * Return true if the provided path string is an absolute path
@@ -8444,7 +8785,8 @@ const AC = hasAbortController
         this.signal = new AS()
       }
       abort(reason = new Error('This operation was aborted')) {
-        this.signal.reason = reason
+        this.signal.reason = this.signal.reason || reason
+        this.signal.aborted = true
         this.signal.dispatchEvent({
           type: 'abort',
           target: this.signal,
@@ -8761,6 +9103,15 @@ class LRUCache {
       this.starts[index] = this.ttls[index] !== 0 ? perf.now() : 0
     }
 
+    this.statusTTL = (status, index) => {
+      if (status) {
+        status.ttl = this.ttls[index]
+        status.start = this.starts[index]
+        status.now = cachedNow || getNow()
+        status.remainingTTL = status.now + status.ttl - status.start
+      }
+    }
+
     // debounce calls to perf.now() to 1s so we're not hitting
     // that costly call repeatedly.
     let cachedNow = 0
@@ -8802,6 +9153,7 @@ class LRUCache {
     }
   }
   updateItemAge(_index) {}
+  statusTTL(_status, _index) {}
   setItemTTL(_index, _ttl, _start) {}
   isStale(_index) {
     return false
@@ -8841,7 +9193,7 @@ class LRUCache {
       }
       return size
     }
-    this.addItemSize = (index, size) => {
+    this.addItemSize = (index, size, status) => {
       this.sizes[index] = size
       if (this.maxSize) {
         const maxSize = this.maxSize - this.sizes[index]
@@ -8850,6 +9202,10 @@ class LRUCache {
         }
       }
       this.calculatedSize += this.sizes[index]
+      if (status) {
+        status.entrySize = size
+        status.totalCalculatedSize = this.calculatedSize
+      }
     }
   }
   removeItemSize(_index) {}
@@ -8899,19 +9255,30 @@ class LRUCache {
   }
 
   isValidIndex(index) {
-    return this.keyMap.get(this.keyList[index]) === index
+    return (
+      index !== undefined &&
+      this.keyMap.get(this.keyList[index]) === index
+    )
   }
 
   *entries() {
     for (const i of this.indexes()) {
-      if (!this.isBackgroundFetch(this.valList[i])) {
+      if (
+        this.valList[i] !== undefined &&
+        this.keyList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
         yield [this.keyList[i], this.valList[i]]
       }
     }
   }
   *rentries() {
     for (const i of this.rindexes()) {
-      if (!this.isBackgroundFetch(this.valList[i])) {
+      if (
+        this.valList[i] !== undefined &&
+        this.keyList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
         yield [this.keyList[i], this.valList[i]]
       }
     }
@@ -8919,14 +9286,20 @@ class LRUCache {
 
   *keys() {
     for (const i of this.indexes()) {
-      if (!this.isBackgroundFetch(this.valList[i])) {
+      if (
+        this.keyList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
         yield this.keyList[i]
       }
     }
   }
   *rkeys() {
     for (const i of this.rindexes()) {
-      if (!this.isBackgroundFetch(this.valList[i])) {
+      if (
+        this.keyList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
         yield this.keyList[i]
       }
     }
@@ -8934,14 +9307,20 @@ class LRUCache {
 
   *values() {
     for (const i of this.indexes()) {
-      if (!this.isBackgroundFetch(this.valList[i])) {
+      if (
+        this.valList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
         yield this.valList[i]
       }
     }
   }
   *rvalues() {
     for (const i of this.rindexes()) {
-      if (!this.isBackgroundFetch(this.valList[i])) {
+      if (
+        this.valList[i] !== undefined &&
+        !this.isBackgroundFetch(this.valList[i])
+      ) {
         yield this.valList[i]
       }
     }
@@ -8951,9 +9330,14 @@ class LRUCache {
     return this.entries()
   }
 
-  find(fn, getOptions = {}) {
+  find(fn, getOptions) {
     for (const i of this.indexes()) {
-      if (fn(this.valList[i], this.keyList[i], this)) {
+      const v = this.valList[i]
+      const value = this.isBackgroundFetch(v)
+        ? v.__staleWhileFetching
+        : v
+      if (value === undefined) continue
+      if (fn(value, this.keyList[i], this)) {
         return this.get(this.keyList[i], getOptions)
       }
     }
@@ -8961,13 +9345,23 @@ class LRUCache {
 
   forEach(fn, thisp = this) {
     for (const i of this.indexes()) {
-      fn.call(thisp, this.valList[i], this.keyList[i], this)
+      const v = this.valList[i]
+      const value = this.isBackgroundFetch(v)
+        ? v.__staleWhileFetching
+        : v
+      if (value === undefined) continue
+      fn.call(thisp, value, this.keyList[i], this)
     }
   }
 
   rforEach(fn, thisp = this) {
     for (const i of this.rindexes()) {
-      fn.call(thisp, this.valList[i], this.keyList[i], this)
+      const v = this.valList[i]
+      const value = this.isBackgroundFetch(v)
+        ? v.__staleWhileFetching
+        : v
+      if (value === undefined) continue
+      fn.call(thisp, value, this.keyList[i], this)
     }
   }
 
@@ -9038,12 +9432,17 @@ class LRUCache {
       size = 0,
       sizeCalculation = this.sizeCalculation,
       noUpdateTTL = this.noUpdateTTL,
+      status,
     } = {}
   ) {
     size = this.requireSize(k, v, size, sizeCalculation)
     // if the item doesn't fit, don't do anything
     // NB: maxEntrySize set to maxSize by default
     if (this.maxEntrySize && size > this.maxEntrySize) {
+      if (status) {
+        status.set = 'miss'
+        status.maxEntrySizeExceeded = true
+      }
       // have to delete, in case a background fetch is there already.
       // in non-async cases, this is a no-op
       this.delete(k)
@@ -9060,7 +9459,10 @@ class LRUCache {
       this.prev[index] = this.tail
       this.tail = index
       this.size++
-      this.addItemSize(index, size)
+      this.addItemSize(index, size, status)
+      if (status) {
+        status.set = 'add'
+      }
       noUpdateTTL = false
     } else {
       // update
@@ -9079,7 +9481,17 @@ class LRUCache {
         }
         this.removeItemSize(index)
         this.valList[index] = v
-        this.addItemSize(index, size)
+        this.addItemSize(index, size, status)
+        if (status) {
+          status.set = 'replace'
+          const oldValue =
+            oldVal && this.isBackgroundFetch(oldVal)
+              ? oldVal.__staleWhileFetching
+              : oldVal
+          if (oldValue !== undefined) status.oldValue = oldValue
+        }
+      } else if (status) {
+        status.set = 'update'
       }
     }
     if (ttl !== 0 && this.ttl === 0 && !this.ttls) {
@@ -9088,6 +9500,7 @@ class LRUCache {
     if (!noUpdateTTL) {
       this.setItemTTL(index, ttl, start)
     }
+    this.statusTTL(status, index)
     if (this.disposeAfter) {
       while (this.disposed.length) {
         this.disposeAfter(...this.disposed.shift())
@@ -9143,15 +9556,22 @@ class LRUCache {
     return head
   }
 
-  has(k, { updateAgeOnHas = this.updateAgeOnHas } = {}) {
+  has(k, { updateAgeOnHas = this.updateAgeOnHas, status } = {}) {
     const index = this.keyMap.get(k)
     if (index !== undefined) {
       if (!this.isStale(index)) {
         if (updateAgeOnHas) {
           this.updateItemAge(index)
         }
+        if (status) status.has = 'hit'
+        this.statusTTL(status, index)
         return true
+      } else if (status) {
+        status.has = 'stale'
+        this.statusTTL(status, index)
       }
+    } else if (status) {
+      status.has = 'miss'
     }
     return false
   }
@@ -9185,8 +9605,17 @@ class LRUCache {
     const cb = (v, updateCache = false) => {
       const { aborted } = ac.signal
       const ignoreAbort = options.ignoreFetchAbort && v !== undefined
+      if (options.status) {
+        if (aborted && !updateCache) {
+          options.status.fetchAborted = true
+          options.status.fetchError = ac.signal.reason
+          if (ignoreAbort) options.status.fetchAbortIgnored = true
+        } else {
+          options.status.fetchResolved = true
+        }
+      }
       if (aborted && !ignoreAbort && !updateCache) {
-        return eb(ac.signal.reason)
+        return fetchFail(ac.signal.reason)
       }
       // either we didn't abort, and are still here, or we did, and ignored
       if (this.valList[index] === p) {
@@ -9197,12 +9626,20 @@ class LRUCache {
             this.delete(k)
           }
         } else {
+          if (options.status) options.status.fetchUpdated = true
           this.set(k, v, fetchOpts.options)
         }
       }
       return v
     }
     const eb = er => {
+      if (options.status) {
+        options.status.fetchRejected = true
+        options.status.fetchError = er
+      }
+      return fetchFail(er)
+    }
+    const fetchFail = er => {
       const { aborted } = ac.signal
       const allowStaleAborted =
         aborted && options.allowStaleOnFetchAbort
@@ -9224,6 +9661,9 @@ class LRUCache {
         }
       }
       if (allowStale) {
+        if (options.status && p.__staleWhileFetching !== undefined) {
+          options.status.returnedStale = true
+        }
         return p.__staleWhileFetching
       } else if (p.__returned === p) {
         throw er
@@ -9247,12 +9687,14 @@ class LRUCache {
         }
       })
     }
+    if (options.status) options.status.fetchDispatched = true
     const p = new Promise(pcall).then(cb, eb)
     p.__abortController = ac
     p.__staleWhileFetching = v
     p.__returned = null
     if (index === undefined) {
-      this.set(k, p, fetchOpts.options)
+      // internal, don't expose status.
+      this.set(k, p, { ...fetchOpts.options, status: undefined })
       index = this.keyMap.get(k)
     } else {
       this.valList[index] = p
@@ -9295,14 +9737,17 @@ class LRUCache {
       allowStaleOnFetchAbort = this.allowStaleOnFetchAbort,
       fetchContext = this.fetchContext,
       forceRefresh = false,
+      status,
       signal,
     } = {}
   ) {
     if (!this.fetchMethod) {
+      if (status) status.fetch = 'get'
       return this.get(k, {
         allowStale,
         updateAgeOnGet,
         noDeleteOnStaleGet,
+        status,
       })
     }
 
@@ -9319,38 +9764,51 @@ class LRUCache {
       allowStaleOnFetchRejection,
       allowStaleOnFetchAbort,
       ignoreFetchAbort,
+      status,
       signal,
     }
 
     let index = this.keyMap.get(k)
     if (index === undefined) {
+      if (status) status.fetch = 'miss'
       const p = this.backgroundFetch(k, index, options, fetchContext)
       return (p.__returned = p)
     } else {
       // in cache, maybe already fetching
       const v = this.valList[index]
       if (this.isBackgroundFetch(v)) {
-        return allowStale && v.__staleWhileFetching !== undefined
-          ? v.__staleWhileFetching
-          : (v.__returned = v)
+        const stale =
+          allowStale && v.__staleWhileFetching !== undefined
+        if (status) {
+          status.fetch = 'inflight'
+          if (stale) status.returnedStale = true
+        }
+        return stale ? v.__staleWhileFetching : (v.__returned = v)
       }
 
       // if we force a refresh, that means do NOT serve the cached value,
       // unless we are already in the process of refreshing the cache.
-      if (!forceRefresh && !this.isStale(index)) {
+      const isStale = this.isStale(index)
+      if (!forceRefresh && !isStale) {
+        if (status) status.fetch = 'hit'
         this.moveToTail(index)
         if (updateAgeOnGet) {
           this.updateItemAge(index)
         }
+        this.statusTTL(status, index)
         return v
       }
 
       // ok, it is stale or a forced refresh, and not already fetching.
       // refresh the cache.
       const p = this.backgroundFetch(k, index, options, fetchContext)
-      return allowStale && p.__staleWhileFetching !== undefined
-        ? p.__staleWhileFetching
-        : (p.__returned = p)
+      const hasStale = p.__staleWhileFetching !== undefined
+      const staleVal = hasStale && allowStale
+      if (status) {
+        status.fetch = hasStale && isStale ? 'stale' : 'refresh'
+        if (staleVal && isStale) status.returnedStale = true
+      }
+      return staleVal ? p.__staleWhileFetching : (p.__returned = p)
     }
   }
 
@@ -9360,28 +9818,39 @@ class LRUCache {
       allowStale = this.allowStale,
       updateAgeOnGet = this.updateAgeOnGet,
       noDeleteOnStaleGet = this.noDeleteOnStaleGet,
+      status,
     } = {}
   ) {
     const index = this.keyMap.get(k)
     if (index !== undefined) {
       const value = this.valList[index]
       const fetching = this.isBackgroundFetch(value)
+      this.statusTTL(status, index)
       if (this.isStale(index)) {
+        if (status) status.get = 'stale'
         // delete only if not an in-flight background fetch
         if (!fetching) {
           if (!noDeleteOnStaleGet) {
             this.delete(k)
           }
+          if (status) status.returnedStale = allowStale
           return allowStale ? value : undefined
         } else {
+          if (status) {
+            status.returnedStale =
+              allowStale && value.__staleWhileFetching !== undefined
+          }
           return allowStale ? value.__staleWhileFetching : undefined
         }
       } else {
+        if (status) status.get = 'hit'
         // if we're currently fetching it, we don't actually have it yet
-        // it's not stale, which means this isn't a staleWhileRefetching,
-        // so we just return undefined
+        // it's not stale, which means this isn't a staleWhileRefetching.
+        // If it's not stale, and fetching, AND has a __staleWhileFetching
+        // value, then that means the user fetched with {forceRefresh:true},
+        // so it's safe to return that value.
         if (fetching) {
-          return undefined
+          return value.__staleWhileFetching
         }
         this.moveToTail(index)
         if (updateAgeOnGet) {
@@ -9389,6 +9858,8 @@ class LRUCache {
         }
         return value
       }
+    } else if (status) {
+      status.get = 'miss'
     }
   }
 
