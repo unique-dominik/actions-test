@@ -17,11 +17,13 @@ export async function appOfApps({
   supportedVersions: string[]
   ignore?: string[]
 }): Promise<void> {
-  const ymlsGlob = new Glob(glob, {
+  const opts = {
     cwd: inDir,
     absolute: true,
-    ...(ignore && ignore.length ? ignore : {})
-  })
+    ...(ignore && ignore.length ? {ignore} : {})
+  }
+  core.debug(`Glob options are: ${JSON.stringify(opts)}`)
+  const ymlsGlob = new Glob(glob, opts)
   const applicationSpecs: ArgoApplication[] = []
   core.startGroup('Globbing files and evaluating candidates…')
   for await (const candidate of ymlsGlob) {

@@ -3727,7 +3727,9 @@ const yaml_1 = __importDefault(__nccwpck_require__(4083));
 function appOfApps({ inDir, outDir, glob, supportedVersions, ignore }) {
     var _a, e_1, _b, _c;
     return __awaiter(this, void 0, void 0, function* () {
-        const ymlsGlob = new glob_1.Glob(glob, Object.assign({ cwd: inDir, absolute: true }, (ignore && ignore.length ? ignore : {})));
+        const opts = Object.assign({ cwd: inDir, absolute: true }, (ignore && ignore.length ? { ignore } : {}));
+        core.debug(`Glob options are: ${JSON.stringify(opts)}`);
+        const ymlsGlob = new glob_1.Glob(glob, opts);
         const applicationSpecs = [];
         core.startGroup('Globbing files and evaluating candidates…');
         try {

@@ -1,6 +1,6 @@
 {
   "name": "app-of-apps",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "Grabs a set of Argo Applications and pipes them in a new folder with the purpose of creating an Argo Application of Applications.",
   "main": "src/main.ts",
