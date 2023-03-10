@@ -3724,10 +3724,10 @@ const promises_1 = __nccwpck_require__(3292);
 const glob_1 = __nccwpck_require__(5029);
 const path_1 = __nccwpck_require__(1017);
 const yaml_1 = __importDefault(__nccwpck_require__(4083));
-function appOfApps({ inDir, outDir, glob, supportedVersions }) {
+function appOfApps({ inDir, outDir, glob, supportedVersions, ignore }) {
     var _a, e_1, _b, _c;
     return __awaiter(this, void 0, void 0, function* () {
-        const ymlsGlob = new glob_1.Glob(glob, { cwd: inDir, absolute: true }); // TODO should be input param
+        const ymlsGlob = new glob_1.Glob(glob, Object.assign({ cwd: inDir, absolute: true }, (ignore && ignore.length ? ignore : {})));
         const applicationSpecs = [];
         core.startGroup('Globbing files and evaluating candidates…');
         try {
@@ -3764,7 +3764,7 @@ function appOfApps({ inDir, outDir, glob, supportedVersions }) {
             finally { if (e_1) throw e_1.error; }
         }
         core.endGroup();
-        core.startGroup('Evaluating specs…');
+        core.startGroup('Composing specs…');
         yield (0, promises_1.mkdir)(outDir);
         for (const spec of applicationSpecs) {
             const newFileName = specName(spec.crd);
@@ -3839,11 +3839,22 @@ function run() {
             const outDir = core.getInput('output-directory');
             const argoFileGlob = core.getInput('argo-file-glob');
             const supportedVersions = core.getMultilineInput('supported-versions');
+            const ignore = core.getMultilineInput('ignore-globs');
             core.debug(`Using directory <${inDir}> saving to <${outDir}>, globbing Argo files as <${argoFileGlob}> and only respecting the following versions:`);
             supportedVersions.map(v => {
                 core.debug(`\t - ${v}`);
             });
-            yield (0, app_of_apps_1.appOfApps)({ inDir, outDir, glob: argoFileGlob, supportedVersions });
+            core.debug(`Equally, the following paths will get ignored:`);
+            ignore.map(v => {
+                core.debug(`\t - ${v}`);
+            });
+            yield (0, app_of_apps_1.appOfApps)({
+                inDir,
+                outDir,
+                glob: argoFileGlob,
+                supportedVersions,
+                ignore
+            });
             // core.setOutput('time', new Date().toTimeString())
         }
         catch (error) {

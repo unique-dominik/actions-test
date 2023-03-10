@@ -8,14 +8,25 @@ async function run(): Promise<void> {
     const argoFileGlob: string = core.getInput('argo-file-glob')
     const supportedVersions: string[] =
       core.getMultilineInput('supported-versions')
+    const ignore: string[] = core.getMultilineInput('ignore-globs')
     core.debug(
       `Using directory <${inDir}> saving to <${outDir}>, globbing Argo files as <${argoFileGlob}> and only respecting the following versions:`
     )
     supportedVersions.map(v => {
       core.debug(`\t - ${v}`)
     })
+    core.debug(`Equally, the following paths will get ignored:`)
+    ignore.map(v => {
+      core.debug(`\t - ${v}`)
+    })
 
-    await appOfApps({inDir, outDir, glob: argoFileGlob, supportedVersions})
+    await appOfApps({
+      inDir,
+      outDir,
+      glob: argoFileGlob,
+      supportedVersions,
+      ignore
+    })
 
     // core.setOutput('time', new Date().toTimeString())
   } catch (error) {

@@ -8,14 +8,20 @@ export async function appOfApps({
   inDir,
   outDir,
   glob,
-  supportedVersions
+  supportedVersions,
+  ignore
 }: {
   inDir: string
   outDir: string
   glob: string
   supportedVersions: string[]
+  ignore?: string[]
 }): Promise<void> {
-  const ymlsGlob = new Glob(glob, {cwd: inDir, absolute: true}) // TODO should be input param
+  const ymlsGlob = new Glob(glob, {
+    cwd: inDir,
+    absolute: true,
+    ...(ignore && ignore.length ? ignore : {})
+  })
   const applicationSpecs: ArgoApplication[] = []
   core.startGroup('Globbing files and evaluating candidates…')
   for await (const candidate of ymlsGlob) {
@@ -37,7 +43,7 @@ export async function appOfApps({
     }
   }
   core.endGroup()
-  core.startGroup('Evaluating specs…')
+  core.startGroup('Composing specs…')
   await mkdir(outDir)
   for (const spec of applicationSpecs) {
     const newFileName = specName(spec.crd)
