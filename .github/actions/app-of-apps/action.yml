@@ -18,6 +18,9 @@ inputs:
     description: Respected apiVersions of the 
     default: |
       argoproj.io/v1alpha1
+  ignore-globs:
+    required: false
+    description: Globs to ignore from scanning
 runs:
   using: 'node16'
   main: 'dist/index.js'
