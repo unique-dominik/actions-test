@@ -1,4 +1,5 @@
 import * as core from '@actions/core'
+import {existsSync} from 'fs'
 import {copyFile, mkdir, readFile} from 'fs/promises'
 import {Glob} from 'glob'
 import {resolve} from 'path'
@@ -46,7 +47,9 @@ export async function appOfApps({
   }
   core.endGroup()
   core.startGroup('Composing specs…')
-  await mkdir(outDir)
+  if (!existsSync(outDir)) {
+    await mkdir(outDir, {recursive: true})
+  }
   for (const spec of applicationSpecs) {
     const newFileName = specName(spec.crd)
     const target = resolve(process.cwd(), outDir, newFileName)
