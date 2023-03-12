@@ -1,6 +1,5 @@
 import * as core from '@actions/core'
-import {existsSync} from 'fs'
-import {copyFile, mkdir, readFile} from 'fs/promises'
+import {copyFile, mkdir, readFile, rmdir} from 'fs/promises'
 import {Glob} from 'glob'
 import {resolve} from 'path'
 import YAML from 'yaml'
@@ -47,26 +46,40 @@ export async function appOfApps({
   }
   core.endGroup()
   core.startGroup('Composing specs…')
-  if (!existsSync(outDir)) {
-    await mkdir(outDir, {recursive: true})
-  }
+
+  await rmdir(outDir)
+  await mkdir(outDir, {recursive: true})
+
   for (const spec of applicationSpecs) {
     const newFileName = specName(spec.crd)
-    const target = resolve(process.cwd(), outDir, newFileName)
+    const newDirName = specDir(spec.crd)
+    const target = resolve(process.cwd(), outDir, newDirName, newFileName)
     await copyFile(spec.path, target)
     core.info(`Copied ${spec.path} to ${target}.`)
   }
   core.endGroup()
 }
 
+function specDir(application: ArgoApplicationCRD): string {
+  return `${
+    application.metadata?.annotations?.['unique.app/target-cluster']
+      ? application.metadata?.annotations?.['unique.app/target-cluster']
+      : '_ambiguous'
+  }`
+}
+
 function specName(application: ArgoApplicationCRD): string {
-  return `${application.metadata?.name}.${application.spec?.destination?.namespace}.yml`
+  return `${application.metadata?.name}.${
+    application.spec?.destination?.namespace
+  }.${application.spec?.source?.path?.replace('/', '_')}.yml`
 }
 
 function isArgoSpec(supportedVersions: string[], application: any): boolean {
   return (
     application.metadata?.name &&
     application.spec?.destination?.namespace &&
+    application.metadata?.annotations?.['unique.app/target-cluster'] && // one could make this an input as well but then one would need yet another input for the annotation itself
+    application.spec?.source?.path &&
     application.metadata?.labels?.name &&
     application.kind === 'Application' &&
     supportedVersions.includes(application.apiVersion)
@@ -86,8 +99,14 @@ interface ArgoApplicationCRD {
     labels: {
       name: string
     }
+    annotations: {
+      'unique.app/target-cluster': string
+    }
   }
   spec: {
+    source: {
+      path: string
+    }
     destination: {
       namespace: string
     }

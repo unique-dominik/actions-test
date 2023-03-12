@@ -5,6 +5,8 @@ metadata:
   namespace: argo
   labels:
     name: src-app
+  annotations:
+    unique.app/target-cluster: clus1
 spec:
   project: default
   source:

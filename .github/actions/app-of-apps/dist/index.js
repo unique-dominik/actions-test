@@ -3720,7 +3720,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.appOfApps = void 0;
 const core = __importStar(__nccwpck_require__(2186));
-const fs_1 = __nccwpck_require__(7147);
 const promises_1 = __nccwpck_require__(3292);
 const glob_1 = __nccwpck_require__(5029);
 const path_1 = __nccwpck_require__(1017);
@@ -3768,12 +3767,12 @@ function appOfApps({ inDir, outDir, glob, supportedVersions, ignore }) {
         }
         core.endGroup();
         core.startGroup('Composing specs…');
-        if (!(0, fs_1.existsSync)(outDir)) {
-            yield (0, promises_1.mkdir)(outDir, { recursive: true });
-        }
+        yield (0, promises_1.rmdir)(outDir);
+        yield (0, promises_1.mkdir)(outDir, { recursive: true });
         for (const spec of applicationSpecs) {
             const newFileName = specName(spec.crd);
-            const target = (0, path_1.resolve)(process.cwd(), outDir, newFileName);
+            const newDirName = specDir(spec.crd);
+            const target = (0, path_1.resolve)(process.cwd(), outDir, newDirName, newFileName);
             yield (0, promises_1.copyFile)(spec.path, target);
             core.info(`Copied ${spec.path} to ${target}.`);
         }
@@ -3781,15 +3780,23 @@ function appOfApps({ inDir, outDir, glob, supportedVersions, ignore }) {
     });
 }
 exports.appOfApps = appOfApps;
+function specDir(application) {
+    var _a, _b, _c, _d;
+    return `${((_b = (_a = application.metadata) === null || _a === void 0 ? void 0 : _a.annotations) === null || _b === void 0 ? void 0 : _b['unique.app/target-cluster'])
+        ? (_d = (_c = application.metadata) === null || _c === void 0 ? void 0 : _c.annotations) === null || _d === void 0 ? void 0 : _d['unique.app/target-cluster']
+        : '_ambiguous'}`;
+}
 function specName(application) {
-    var _a, _b, _c;
-    return `${(_a = application.metadata) === null || _a === void 0 ? void 0 : _a.name}.${(_c = (_b = application.spec) === null || _b === void 0 ? void 0 : _b.destination) === null || _c === void 0 ? void 0 : _c.namespace}.yml`;
+    var _a, _b, _c, _d, _e, _f;
+    return `${(_a = application.metadata) === null || _a === void 0 ? void 0 : _a.name}.${(_c = (_b = application.spec) === null || _b === void 0 ? void 0 : _b.destination) === null || _c === void 0 ? void 0 : _c.namespace}.${(_f = (_e = (_d = application.spec) === null || _d === void 0 ? void 0 : _d.source) === null || _e === void 0 ? void 0 : _e.path) === null || _f === void 0 ? void 0 : _f.replace('/', '_')}.yml`;
 }
 function isArgoSpec(supportedVersions, application) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     return (((_a = application.metadata) === null || _a === void 0 ? void 0 : _a.name) &&
         ((_c = (_b = application.spec) === null || _b === void 0 ? void 0 : _b.destination) === null || _c === void 0 ? void 0 : _c.namespace) &&
-        ((_e = (_d = application.metadata) === null || _d === void 0 ? void 0 : _d.labels) === null || _e === void 0 ? void 0 : _e.name) &&
+        ((_e = (_d = application.metadata) === null || _d === void 0 ? void 0 : _d.annotations) === null || _e === void 0 ? void 0 : _e['unique.app/target-cluster']) && // one could make this an input as well but then one would need yet another input for the annotation itself
+        ((_g = (_f = application.spec) === null || _f === void 0 ? void 0 : _f.source) === null || _g === void 0 ? void 0 : _g.path) &&
+        ((_j = (_h = application.metadata) === null || _h === void 0 ? void 0 : _h.labels) === null || _j === void 0 ? void 0 : _j.name) &&
         application.kind === 'Application' &&
         supportedVersions.includes(application.apiVersion));
 }

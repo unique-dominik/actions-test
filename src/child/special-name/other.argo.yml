@@ -5,6 +5,8 @@ metadata:
   namespace: argo
   labels:
     name: nested-child-app
+  annotations:
+    unique.app/target-cluster: clusC
 spec:
   project: default
   source:
