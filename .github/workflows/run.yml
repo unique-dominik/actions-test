@@ -13,7 +13,5 @@ jobs:
         with:
           input-directory: .
           output-directory: render
-      - uses: actions/upload-artifact@v3
-        with:
-          name: my-artifact
-          path: render
+      - run: ls -Rla
+        working-directory: render

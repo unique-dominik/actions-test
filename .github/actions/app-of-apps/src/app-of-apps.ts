@@ -1,8 +1,8 @@
 import * as core from '@actions/core'
-import {existsSync} from 'fs'
-import {copyFile, mkdir, readFile, rmdir} from 'fs/promises'
-import {Glob} from 'glob'
-import {resolve} from 'path'
+import { existsSync } from 'fs'
+import { copyFile, mkdir, readFile, rmdir } from 'fs/promises'
+import { Glob } from 'glob'
+import { resolve } from 'path'
 import YAML from 'yaml'
 
 export async function appOfApps({
@@ -49,11 +49,13 @@ export async function appOfApps({
   core.startGroup('Composing specs…')
 
   if (existsSync(outDir)) await rmdir(outDir)
-  await mkdir(outDir, {recursive: true})
 
   for (const spec of applicationSpecs) {
     const newFileName = specName(spec.crd)
     const newDirName = specDir(spec.crd)
+
+    await mkdir(resolve(process.cwd(), outDir, newDirName), {recursive: true})
+
     const target = resolve(process.cwd(), outDir, newDirName, newFileName)
     await copyFile(spec.path, target)
     core.info(`Copied ${spec.path} to ${target}.`)
@@ -65,14 +67,14 @@ function specDir(application: ArgoApplicationCRD): string {
   return `${
     application.metadata?.annotations?.['unique.app/target-cluster']
       ? application.metadata?.annotations?.['unique.app/target-cluster']
-      : '_ambiguous'
+      : '_ambiguous' // case should not happens as `isArgoSpec` already filters non-targeted specs
   }`
 }
 
 function specName(application: ArgoApplicationCRD): string {
   return `${application.metadata?.name}.${
     application.spec?.destination?.namespace
-  }.${application.spec?.source?.path?.replace('/', '_')}.yml`
+  }.yml`
 }
 
 function isArgoSpec(supportedVersions: string[], application: any): boolean {
@@ -80,7 +82,6 @@ function isArgoSpec(supportedVersions: string[], application: any): boolean {
     application.metadata?.name &&
     application.spec?.destination?.namespace &&
     application.metadata?.annotations?.['unique.app/target-cluster'] && // one could make this an input as well but then one would need yet another input for the annotation itself
-    application.spec?.source?.path &&
     application.metadata?.labels?.name &&
     application.kind === 'Application' &&
     supportedVersions.includes(application.apiVersion)
@@ -105,9 +106,6 @@ interface ArgoApplicationCRD {
     }
   }
   spec: {
-    source: {
-      path: string
-    }
     destination: {
       namespace: string
     }

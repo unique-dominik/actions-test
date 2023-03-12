@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: no-target
+  namespace: argo
+  labels:
+    name: no-target
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/unique-dominik/anyrepo
+    targetRevision: HEAD
+    path: no-target/qa
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: custom-integrations
+  revisionHistoryLimit: 10
