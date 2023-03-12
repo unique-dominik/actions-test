@@ -3720,6 +3720,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.appOfApps = void 0;
 const core = __importStar(__nccwpck_require__(2186));
+const fs_1 = __nccwpck_require__(7147);
 const promises_1 = __nccwpck_require__(3292);
 const glob_1 = __nccwpck_require__(5029);
 const path_1 = __nccwpck_require__(1017);
@@ -3767,7 +3768,8 @@ function appOfApps({ inDir, outDir, glob, supportedVersions, ignore }) {
         }
         core.endGroup();
         core.startGroup('Composing specs…');
-        yield (0, promises_1.rmdir)(outDir);
+        if ((0, fs_1.existsSync)(outDir))
+            yield (0, promises_1.rmdir)(outDir);
         yield (0, promises_1.mkdir)(outDir, { recursive: true });
         for (const spec of applicationSpecs) {
             const newFileName = specName(spec.crd);

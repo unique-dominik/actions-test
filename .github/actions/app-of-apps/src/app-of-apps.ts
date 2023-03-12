@@ -1,4 +1,5 @@
 import * as core from '@actions/core'
+import {existsSync} from 'fs'
 import {copyFile, mkdir, readFile, rmdir} from 'fs/promises'
 import {Glob} from 'glob'
 import {resolve} from 'path'
@@ -47,7 +48,7 @@ export async function appOfApps({
   core.endGroup()
   core.startGroup('Composing specs…')
 
-  await rmdir(outDir)
+  if (existsSync(outDir)) await rmdir(outDir)
   await mkdir(outDir, {recursive: true})
 
   for (const spec of applicationSpecs) {
