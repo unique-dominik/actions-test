@@ -3769,7 +3769,7 @@ function appOfApps({ inDir, outDir, glob, supportedVersions, ignore }) {
         core.endGroup();
         core.startGroup('Composing specs…');
         if ((0, fs_1.existsSync)(outDir))
-            yield (0, promises_1.rmdir)(outDir);
+            yield (0, promises_1.rm)(outDir, { recursive: true, force: true });
         for (const spec of applicationSpecs) {
             const newFileName = specName(spec.crd);
             const newDirName = specDir(spec.crd);

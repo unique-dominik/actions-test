@@ -1,6 +1,6 @@
 import * as core from '@actions/core'
 import { existsSync } from 'fs'
-import { copyFile, mkdir, readFile, rmdir } from 'fs/promises'
+import { copyFile, mkdir, readFile, rm } from 'fs/promises'
 import { Glob } from 'glob'
 import { resolve } from 'path'
 import YAML from 'yaml'
@@ -48,7 +48,7 @@ export async function appOfApps({
   core.endGroup()
   core.startGroup('Composing specs…')
 
-  if (existsSync(outDir)) await rmdir(outDir)
+  if (existsSync(outDir)) await rm(outDir, { recursive: true, force: true })
 
   for (const spec of applicationSpecs) {
     const newFileName = specName(spec.crd)
